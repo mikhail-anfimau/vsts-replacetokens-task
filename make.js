@@ -52,27 +52,26 @@ target.build = function() {
     target.clean();
 
     // build task
-    console.log('build: building task');
+    console.log('build: building tasks');
     var taskOutputPath = path.join(binariesPath, 'task');
     shell.exec('tsc --outDir ' + taskOutputPath + ' --rootDir ' + sourcePath);
-    console.log('  task -> ' + taskOutputPath);
+    console.log('  tasks -> ' + taskOutputPath);
 
-    // copy external modules
-    console.log('build: copying externals modules');
-    getExternalModules(taskOutputPath);
+    ['ReplaceTokensV3', 'ReplaceTokensV4'].forEach(name => {
+        // copy external modules
+        getExternalModules(path.join(taskOutputPath, name));
+        console.log('  ' + name + '.modules -> ' + path.join(taskOutputPath, name, 'node-modules'))
 
-    console.log('  modules -> ' + path.join(taskOutputPath, 'node-modules'))
+        shell.cp('-Rf', path.join(__dirname, 'task', name, '*.png'), path.join(taskOutputPath, name));
+        shell.cp('-Rf', path.join(__dirname, 'task', name, '*.json'), path.join(taskOutputPath, name));
+        console.log('  ' + name + '.resources -> ' + path.join(taskOutputPath, name));
+    });
 
     // copy resources
-    console.log('build: copying resources');
-    ['README.md', 'LICENSE.txt', 'vss-extension.json'].forEach(function(file) {
+    ['README.md', 'LICENSE.txt', 'vss-extension.json'].forEach(file => {
         shell.cp('-Rf', path.join(__dirname, file), binariesPath);
         console.log('  ' + file + ' -> ' + path.join(binariesPath, file));
     });
-
-    shell.cp('-Rf', path.join(__dirname, 'task', '*.png'), taskOutputPath);
-    shell.cp('-Rf', path.join(__dirname, 'task', '*.json'), taskOutputPath);
-    console.log('  task -> ' + taskOutputPath);
 
     var imagesPath = path.join(binariesPath, 'images')
     shell.mkdir('-p', imagesPath);
@@ -104,7 +103,7 @@ target.package = function() {
         if (options.version === 'auto') {
             var ref = new Date(2000, 1, 1);
             var now = new Date();
-            var major = 3
+            var major = 4
             var minor = Math.floor((now - ref) / 86400000);
             var patch = Math.floor(Math.floor(now.getSeconds() + (60 * (now.getMinutes() + (60 * now.getHours())))) * 0.5)
             options.version = major + '.' + minor + '.' + patch
@@ -124,7 +123,7 @@ target.package = function() {
     }
 
     updateExtensionManifest(options);
-    updateTaskManifest(options);
+    updateTaskManifests(options);
     
     shell.exec('tfx extension create --root "' + binariesPath + '" --output-path "' + packagesPath +'"')
 }
@@ -147,31 +146,32 @@ updateExtensionManifest = function(options) {
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 4));
 }
 
-updateTaskManifest = function(options) {
-    var manifestPath = path.join(binariesPath, 'task', 'task.json')
-    var manifest = JSON.parse(fs.readFileSync(manifestPath));
-    
-    if (options.version) {
-        manifest.version.Major = semver.major(options.version);
-        manifest.version.Minor = semver.minor(options.version);
-        manifest.version.Patch = semver.patch(options.version);
-    }
-
-    manifest.helpMarkDown = 'v' + manifest.version.Major + '.' + manifest.version.Minor + '.' + manifest.version.Patch + ' - ' + manifest.helpMarkDown;
-    
-    if (options.stage) {
-        manifest.friendlyName = manifest.friendlyName + ' (' + options.stage
-
+updateTaskManifests = function(options) {
+    ['ReplaceTokensV3', 'ReplaceTokensV4'].forEach(name => {
+        var manifestPath = path.join(binariesPath, 'task', name, 'task.json')
+        var manifest = JSON.parse(fs.readFileSync(manifestPath));
+        
         if (options.version) {
-            manifest.friendlyName = manifest.friendlyName + ' ' + options.version
+            manifest.version.Minor = semver.minor(options.version);
+            manifest.version.Patch = semver.patch(options.version);
         }
 
-        manifest.friendlyName = manifest.friendlyName + ')'
-    }
-    
-    if (options.taskId) {
-        manifest.id = options.taskId
-    }
-    
-    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 4));
+        manifest.helpMarkDown = 'v' + manifest.version.Major + '.' + manifest.version.Minor + '.' + manifest.version.Patch + ' - ' + manifest.helpMarkDown;
+        
+        if (options.stage) {
+            manifest.friendlyName = manifest.friendlyName + ' (' + options.stage
+
+            if (options.version) {
+                manifest.friendlyName = manifest.friendlyName + ' ' + manifest.version.Major + '.' + manifest.version.Minor + '.' + manifest.version.Patch
+            }
+
+            manifest.friendlyName = manifest.friendlyName + ')'
+        }
+        
+        if (options.taskId) {
+            manifest.id = options.taskId
+        }
+        
+        fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 4));
+    });
 }
