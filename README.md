@@ -43,14 +43,15 @@ Parameters include (in parenthesis the yaml name):
 - **Escape type** (escapeType): specify how to escape variable values. Value `auto` uses the file extension (`.json` and `.xml`) to determine the escaping and `none` as fallback.
 - **Escape character** (escapeChar): when using `custom` escape type, the escape character to use when escaping characters in the variable values.
 - **Characters to escape** (charsToEscape): when using `custom` escape type, characters in variable values to escape before replacing tokens.
+- **Token pattern** (tokenPattern): specify the pattern for the tokens to search in the target files. You can use `custom` to define your own token prefix and/or suffix.
+- **Token prefix** (tokenPrefix): when using `custom` pattern, the prefix of the tokens to search in the target files.
+- **Token suffix** (tokenSuffix): when using `custom` pattern, the suffix of the tokens to search in the target files.
 - **Verbosity** (verbosity): specify the level of log verbosity. (note: error and system debug are always on)
 - **Action** (actionOnMissing): specify the action to take on a missing variable.
   - _silently continue_: the task will continue without displaying any message.
   - _log warning_: the task will continue but log a warning with the missing variable name.
   - _fail_: the task will fail and log the missing variable name.
 - **Keep token** (keepToken): if checked tokens with missing variables will not be replaced by empty string.
-- **Token prefix** (tokenPrefix): the prefix of the tokens to search in the target files.
-- **Token suffix** (tokenSuffix): the suffix of the tokens to search in the target files.
 - **Empty value** (emptyValue): the variable value that will be replaced with an empty string.
 - **Variable files (JSON)** (variableFiles): the absolute or relative comma or newline-separated paths to the files containing additional variables. Wildcards can be used (eg: `vars\**\*.json` for all _.json_ files in all sub folders of _vars_). Variables declared in files overrides variables defined in the pipeline.
 - **Variable separator** (variableSeparator): the separtor to use in variable names for nested objects and arrays in variable files. Example: `{ 'My': { 'Value': ['Hello World!'] } }` will create a variable _My.Value.0_ with the value _Hello World!_.
@@ -64,6 +65,10 @@ If you want to use tokens in XML based configuration files to be replaced during
   - replace tokens in your updated configuration file
 
 ## Release notes
+**New in 4.0.0**
+- **Breaking change**: If you were using custom _Token prefix_ and/or _Token suffix_ you need to select the appropriate pattern in _Token pattern_ or select `custom`.
+- Add _Token pattern_ parameter to more easily provide toekn prefix and suffix pattern ([#131](https://github.com/qetza/vsts-replacetokens-task/issues/131)).
+
 **New in 3.4.0**
 - Add summary in logs with number of tokens found and replaced ([#126](https://github.com/qetza/vsts-replacetokens-task/issues/126)).
 - Add support for variables in external JSON files ([#113](https://github.com/qetza/vsts-replacetokens-task/issues/113)).

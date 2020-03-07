@@ -396,8 +396,7 @@ async function run() {
     try {
         // load inputs
         let root: string = tl.getPathInput('rootDirectory', false, true);
-        let tokenPrefix: string = tl.getInput('tokenPrefix', true).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        let tokenSuffix: string = tl.getInput('tokenSuffix', true).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        
         let options: Options = {
             encoding: mapEncoding(tl.getInput('encoding', true)),
             keepToken: tl.getBoolInput('keepToken', true),
@@ -411,6 +410,50 @@ async function run() {
         };
 
         logger = new Logger(mapLogLevel(options.verbosity));
+
+        let tokenPrefix: string = '';
+        let tokenSuffix: string = '';
+        let tokenPattern: string = tl.getInput('tokenPattern', true);
+
+        switch (tokenPattern)
+        {
+            case 'default':
+                tokenPrefix = '#{';
+                tokenSuffix = '}#';
+                break;
+
+            case 'octopus':
+                tokenPrefix = '#{';
+                tokenSuffix = '}';
+                break;
+                
+            case 'rm':
+                tokenPrefix = '__';
+                tokenSuffix = '__';
+                break;
+
+            case '2braces':
+                tokenPrefix = '{{';
+                tokenSuffix = '}}';
+                break;
+
+            case '2brackets':
+                tokenPrefix = '[[';
+                tokenSuffix = ']]';
+                break;
+
+            case 'custom':
+                tokenPrefix = tl.getInput('tokenPrefix', true);
+                tokenSuffix = tl.getInput('tokenSuffix', true);
+                break;
+            
+            default:
+                logger.error('invalid token pattern: ' + tokenPattern);
+                break;
+        }
+
+        tokenPrefix = tokenPrefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        tokenSuffix = tokenSuffix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 
         let rules: Rule[] = [];
         tl.getDelimitedInput('targetFiles', '\n', true).forEach((l: string) => {

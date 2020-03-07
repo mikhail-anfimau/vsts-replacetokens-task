@@ -3,6 +3,7 @@
     "name": "replacetokens",
     "friendlyName": "Replace Tokens",
     "description": "Replace tokens in files",
+    "releaseNotes": "<ul><li>Add new token pattern parameter.</li></ul><b>Click 'More Information' for breaking changes</b>",
     "helpMarkDown": "[More Information](https://github.com/qetza/vsts-replacetokens-task#readme)",
     "category": "Utility",
     "visibility": [
@@ -75,6 +76,40 @@
             "visibleRule": "encoding != ascii && encoding != win1252 && encoding != iso88591"
         },
         {
+            "name": "tokenPattern",
+            "type": "pickList",
+            "defaultValue": "default",
+            "required": true,
+            "label": "Token pattern",
+            "helpMarkDown": "Specify the pattern for the tokens to search in the target files.",
+            "options": {
+                "default": "#{variable name}#",
+                "octopus": "#{variable name}",
+                "rm": "__variable name__",
+                "2braces": "{{variable name}}",
+                "2brackets": "[[variable name]]",
+                "custom": "custom" 
+            }
+        },
+        {
+            "name": "tokenPrefix",
+            "type": "string",
+            "label": "Token prefix",
+            "defaultValue": "#{",
+            "required": true,
+            "helpMarkDown": "The prefix of the tokens to search in the target files.",
+            "visibleRule": "tokenPattern == custom"
+        },
+        {
+            "name": "tokenSuffix",
+            "type": "string",
+            "label": "Token suffix",
+            "defaultValue": "}#",
+            "required": true,
+            "helpMarkDown": "The suffix of the tokens to search in the target files.",
+            "visibleRule": "tokenPattern == custom"
+        },
+        {
             "name": "escapeType",
             "type": "pickList",
             "defaultValue": "auto",
@@ -136,24 +171,6 @@
             "groupName": "missing",
             "required": true,
             "helpMarkDown": "If checked tokens with missing variables will not be replaced by empty string."
-        },
-        {
-            "name": "tokenPrefix",
-            "type": "string",
-            "label": "Token prefix",
-            "defaultValue": "#{",
-            "groupName": "advanced",
-            "required": true,
-            "helpMarkDown": "The prefix of the tokens to search in the target files."
-        },
-        {
-            "name": "tokenSuffix",
-            "type": "string",
-            "label": "Token suffix",
-            "defaultValue": "}#",
-            "groupName": "advanced",
-            "required": true,
-            "helpMarkDown": "The suffix of the tokens to search in the target files."
         },
         {
             "name": "emptyValue",
