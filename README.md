@@ -69,6 +69,7 @@ If you want to use tokens in XML based configuration files to be replaced during
 **New in 4.0.0**
 - **Breaking change**: If you were using custom _Token prefix_ and/or _Token suffix_ you need to select the appropriate pattern in _Token pattern_ or select `custom`.
 - Add _Token pattern_ parameter to more easily provide toekn prefix and suffix pattern ([#131](https://github.com/qetza/vsts-replacetokens-task/issues/131)).
+- Add anonymous usage telemetry.
 
 **New in 3.5.0**
 - Add anonymous usage telemetry.

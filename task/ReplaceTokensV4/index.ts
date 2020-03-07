@@ -4,7 +4,8 @@ import iconv = require('iconv-lite');
 import jschardet = require('jschardet');
 import path = require('path');
 import os = require('os');
-import { isObject } from 'util';
+import appInsights = require('applicationinsights');
+import crypto = require('crypto');
 
 const ENCODING_AUTO: string = 'auto';
 const ENCODING_ASCII: string = 'ascii';
@@ -23,6 +24,8 @@ const JSON_ESCAPE: RegExp = /["\\/\b\f\n\r\t]/g;
 const WIN32_DIRECTORY_SEPARATOR: RegExp = /\\/g;
 const POSIX_DIRECTORY_SEPARATOR: RegExp = /\//g;
 const OUTPUT_WILDCARD: RegExp = /\*/g;
+
+const EVENT_NAME: string = 'tokens.replaced';
 
 interface Options {
     readonly encoding: string, 
@@ -121,6 +124,34 @@ class Counter {
     public Files: number = 0;
 }
 
+appInsights.setup('40daeb90-bdab-43f4-9d46-a586be34b7cd')
+    .setAutoDependencyCorrelation(false)
+    .setAutoCollectRequests(false)
+    .setAutoCollectPerformance(false)
+    .setAutoCollectExceptions(false)
+    .setAutoCollectDependencies(false)
+    .setAutoCollectConsole(false)
+    .setUseDiskRetryCaching(false)
+    .setSendLiveMetrics(false)
+    .setDistributedTracingMode(appInsights.DistributedTracingModes.AI)
+    .start();
+
+var telemetry: appInsights.TelemetryClient = appInsights.defaultClient;
+telemetry.context.tags[telemetry.context.keys.userAccountId] = crypto
+    .createHash('md5')
+    .update(tl.getVariable('system.collectionid'))
+    .digest('hex');
+telemetry.context.tags[telemetry.context.keys.userAuthUserId] = crypto
+    .createHash('md5')
+    .update(tl.getVariable('system.teamprojectid') + tl.getVariable('system.definitionid'))
+    .digest('hex');
+telemetry.context.tags[telemetry.context.keys.operationId] = crypto.randomBytes(16).toString('hex');
+telemetry.context.tags[telemetry.context.keys.operationName] = 'replacetokens';
+telemetry.context.tags[telemetry.context.keys.applicationVersion] = '3.5.0';
+telemetry.context.tags[telemetry.context.keys.cloudRole] = tl.getVariable('system.collectionuri').startsWith('https://dev.azure.com')
+    ? 'services' 
+    : 'server';
+
 var logger: ILogger = new NullLogger();
 var globalCounters: Counter = new Counter(); 
 var fileVariables: {[name: string]: string} = {};
@@ -207,9 +238,9 @@ var loadVariablesFromJson = function(
     if (name.length != 0)
         prefix += separator;
 
-    if (value === null || type == "boolean" || type == "number" || type == "string")
+    if (value === null || type == 'boolean' || type == 'number' || type == 'string')
     {
-        variables[name] = (value === null ? "" : value) + "";
+        variables[name] = (value === null ? '' : value) + '';
 
         ++count;
         logger.debug('  loaded variable: ' + name);
@@ -220,7 +251,7 @@ var loadVariablesFromJson = function(
             count += loadVariablesFromJson(v, prefix + i, separator, variables);
         });
     }
-    else if (type == "object")
+    else if (type == 'object')
     {
         Object.keys(value).forEach(key => {
             count += loadVariablesFromJson(value[key], prefix + key, separator, variables);
@@ -373,13 +404,13 @@ var replaceTokensInFile = function (
 var mapLogLevel = function (level: string): LogLevel {
     switch (level)
     {
-        case "normal":
+        case 'normal':
             return LogLevel.Info;
         
-        case "detailed":
+        case 'detailed':
             return LogLevel.Debug;
         
-        case "off":
+        case 'off':
             return LogLevel.Off;
     }
 
@@ -393,10 +424,12 @@ var normalize = function (p: string): string {
 }
 
 async function run() {
+    let telemetryProperties: { [key: string]: string } = {};
+    let enableTelemetry: boolean = true;
+
     try {
         // load inputs
         let root: string = tl.getPathInput('rootDirectory', false, true);
-        
         let options: Options = {
             encoding: mapEncoding(tl.getInput('encoding', true)),
             keepToken: tl.getBoolInput('keepToken', true),
@@ -409,6 +442,9 @@ async function run() {
             verbosity: tl.getInput('verbosity', true)
         };
 
+        let enableTelemetry: boolean = tl.getBoolInput('enableTelemetry', true);
+        telemetry.config.disableAppInsights = !enableTelemetry;
+        
         logger = new Logger(mapLogLevel(options.verbosity));
 
         let tokenPrefix: string = '';
@@ -452,10 +488,11 @@ async function run() {
                 break;
         }
 
-        tokenPrefix = tokenPrefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-        tokenSuffix = tokenSuffix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-
         let rules: Rule[] = [];
+        let ruleUsingInputWildcardCount: number = 0;
+        let ruleUsingNegativeInputPattern: number = 0;
+        let ruleUsingOutputPatternCount: number = 0;
+
         tl.getDelimitedInput('targetFiles', '\n', true).forEach((l: string) => {
             if (l)
                 l.split(',').forEach((line: string) => {
@@ -478,11 +515,21 @@ async function run() {
                         }
 
                         rules.push(rule);
+
+                        if (ruleParts[0].indexOf('!') != -1)
+                            ++ruleUsingNegativeInputPattern;
+
+                        if (rule.isInputWildcard)
+                            ++ruleUsingInputWildcardCount;
+                        
+                        if (rule.outputPattern)
+                            ++ruleUsingOutputPatternCount;
                     }
                 })
         });
 
         let variableSeparator: string = tl.getInput('variableSeparator', false);
+        let variableFilesCount: number = 0;
         tl.getDelimitedInput('variableFiles', '\n', false).forEach((l: string) => {
             if (l)
                 l.split(',').forEach((path: string) => {
@@ -507,14 +554,44 @@ async function run() {
                             let count: number = loadVariablesFromJson(variables, '', variableSeparator, fileVariables);
 
                             logger.info('  ' + count + ' variable(s) loaded.');
+                            ++variableFilesCount;
                         });
                     }
                 });
         });
 
         // initialize task
-        let regex: RegExp = new RegExp(tokenPrefix + '((?:(?!' + tokenSuffix + ').)*)' + tokenSuffix, 'gm');
+        let escapedTokenPrefix: string = tokenPrefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        let escapedTokenSuffix: string = tokenSuffix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+        let regex: RegExp = new RegExp(escapedTokenPrefix + '((?:(?!' + escapedTokenSuffix + ').)*)' + escapedTokenSuffix, 'gm');
         logger.debug('pattern: ' + regex.source);
+
+        // usage telemetry properties
+        telemetryProperties = { 
+            'taskId': 'a8515ec8-7254-4ffd-912c-86772e2b5962',
+            'preview': 'true',
+            'pipeline': tl.getVariable('release.releaseid') ? 'release' : 'build',
+            'result': 'succeeded',
+	    'tokenPattern': tokenPattern,
+            'tokenPrefix': tokenPrefix,
+            'tokenSuffix': tokenSuffix,
+            'pattern': regex.source,
+            'encoding': options.encoding,
+            'keepToken': options.keepToken + '',
+            'actionOnMissing': options.actionOnMissing,
+            'writeBOM': options.writeBOM + '',
+            'emptyValue': options.emptyValue,
+            'escapeType': options.escapeType,
+            'escapeChar': options.escapeChar,
+            'charsToEscape': options.charsToEscape,
+            'verbosity': options.verbosity,
+            'variableFiles': variableFilesCount + '',
+            'variableSeparator': variableSeparator,
+            'rules': rules.length + '',
+            'rulesWithInputWildcard': ruleUsingInputWildcardCount + '',
+            'rulesWithOutputPattern': ruleUsingOutputPatternCount + '',
+            'rulesWithNegativePattern': ruleUsingNegativeInputPattern + '',
+        };
 
         // process files
         rules.forEach(rule => {
@@ -554,10 +631,53 @@ async function run() {
         });
 
         logger.info('replaced ' + globalCounters.Replaced + ' tokens out of ' + globalCounters.Tokens + ' in ' + globalCounters.Files + ' file(s).');
+
+        try
+        {
+            // make sure telemetry exception doesn't break task
+            telemetryProperties.replacedTokens = globalCounters.Replaced + '';
+            telemetryProperties.processedFiles = globalCounters.Files + '';
+            telemetry.trackEvent({ 
+                'name': EVENT_NAME, 
+                'properties': telemetryProperties
+            });
+
+            if (enableTelemetry)
+                logger.debug('sent usage telemetry: ' + JSON.stringify(telemetryProperties));
+        }
+        catch (err)
+        {
+            logger.debug('error sending telemetry: ' + err.message);
+        }
     }
     catch (err)
     {
+        try
+        {
+            // make sure telemetry exception doesn't break task
+            telemetry.trackException({ 
+                exception: err 
+            });
+
+            telemetryProperties.result = 'failed';
+            telemetry.trackEvent({ 
+                'name': EVENT_NAME, 
+                'properties': telemetryProperties
+            });
+
+            if (enableTelemetry)
+                logger.debug('sent usage telemetry: ' + JSON.stringify(telemetryProperties));
+        }
+        catch (err2)
+        {
+            logger.debug('error sending telemetry: ' + err2.message);
+        }
+
         logger.error(err.message);
+    }
+    finally
+    {
+        telemetry.flush();
     }
 }
 

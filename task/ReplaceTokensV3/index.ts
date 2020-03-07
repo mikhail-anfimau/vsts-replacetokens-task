@@ -425,6 +425,8 @@ var normalize = function (p: string): string {
 
 async function run() {
     let telemetryProperties: { [key: string]: string } = {};
+    let enableTelemetry: boolean = true;
+
     try {
         // load inputs
         let root: string = tl.getPathInput('rootDirectory', false, true);
@@ -442,8 +444,9 @@ async function run() {
             verbosity: tl.getInput('verbosity', true)
         };
 
-        telemetry.config.disableAppInsights = !tl.getBoolInput('enableTelemetry', true);
-
+        let enableTelemetry: boolean = tl.getBoolInput('enableTelemetry', true);
+        telemetry.config.disableAppInsights = !enableTelemetry;
+        
         logger = new Logger(mapLogLevel(options.verbosity));
 
         let rules: Rule[] = [];
@@ -589,28 +592,47 @@ async function run() {
 
         logger.info('replaced ' + globalCounters.Replaced + ' tokens out of ' + globalCounters.Tokens + ' in ' + globalCounters.Files + ' file(s).');
 
-        telemetryProperties.replacedTokens = globalCounters.Replaced + '';
-        telemetryProperties.processedFiles = globalCounters.Files + '';
-        telemetry.trackEvent({ 
-            'name': EVENT_NAME, 
-            'properties': telemetryProperties
-        });
+        try
+        {
+            // make sure telemetry exception doesn't break task
+            telemetryProperties.replacedTokens = globalCounters.Replaced + '';
+            telemetryProperties.processedFiles = globalCounters.Files + '';
+            telemetry.trackEvent({ 
+                'name': EVENT_NAME, 
+                'properties': telemetryProperties
+            });
 
-        logger.debug('sent usage telemetry: ' + JSON.stringify(telemetryProperties));
+            if (enableTelemetry)
+                logger.debug('sent usage telemetry: ' + JSON.stringify(telemetryProperties));
+        }
+        catch (err)
+        {
+            logger.debug('error sending telemetry: ' + err.message);
+        }
     }
     catch (err)
     {
-        telemetry.trackException({ 
-            exception: err 
-        });
+        try
+        {
+            // make sure telemetry exception doesn't break task
+            telemetry.trackException({ 
+                exception: err 
+            });
 
-        telemetryProperties.result = 'failed';
-        telemetry.trackEvent({ 
-            'name': EVENT_NAME, 
-            'properties': telemetryProperties
-        });
+            telemetryProperties.result = 'failed';
+            telemetry.trackEvent({ 
+                'name': EVENT_NAME, 
+                'properties': telemetryProperties
+            });
 
-        logger.debug('sent usage telemetry: ' + JSON.stringify(telemetryProperties));
+            if (enableTelemetry)
+                logger.debug('sent usage telemetry: ' + JSON.stringify(telemetryProperties));
+        }
+        catch (err2)
+        {
+            logger.debug('error sending telemetry: ' + err2.message);
+        }
+
         logger.error(err.message);
     }
     finally
