@@ -24,6 +24,7 @@ var os = require('os');
 var cp = require('child_process');
 var fs = require('fs');
 var semver = require('semver');
+var iconv = require('iconv-lite');
 
 // global paths
 var sourcePath = path.join(__dirname, 'task');
@@ -117,13 +118,14 @@ target.package = function() {
     
     switch (options.stage) {
         case 'dev':
-            options.taskId = '0664FF86-F509-4392-A33C-B2D9239B9AE5';
+            options.taskId = '0664ff86-f509-4392-a33c-b2d9239b9ae5';
             options.public = false;
+            options.instrumentationKey = 'bbfb76b7-7c69-4f45-ac4f-e0e548fd423e';
             break;
     }
 
     updateExtensionManifest(options);
-    updateTaskManifests(options);
+    updateTaskManifestsAndTelemetry(options);
     
     shell.exec('tfx extension create --root "' + binariesPath + '" --output-path "' + packagesPath +'"')
 }
@@ -137,8 +139,8 @@ updateExtensionManifest = function(options) {
     }
     
     if (options.stage) {
-        manifest.id = manifest.id + '-' + options.stage
-        manifest.name = manifest.name + ' (' + options.stage + ')'
+        manifest.id = manifest.id + '-' + options.stage;
+        manifest.name = manifest.name + ' (' + options.stage + ')';
     }
 
     manifest.public = options.public;
@@ -146,7 +148,8 @@ updateExtensionManifest = function(options) {
     fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 4));
 }
 
-updateTaskManifests = function(options) {
+updateTaskManifestsAndTelemetry = function(options) {
+    // manifest
     ['ReplaceTokensV3', 'ReplaceTokensV4'].forEach(name => {
         var manifestPath = path.join(binariesPath, 'task', name, 'task.json')
         var manifest = JSON.parse(fs.readFileSync(manifestPath));
@@ -156,22 +159,39 @@ updateTaskManifests = function(options) {
             manifest.version.Patch = semver.patch(options.version);
         }
 
-        manifest.helpMarkDown = 'v' + manifest.version.Major + '.' + manifest.version.Minor + '.' + manifest.version.Patch + ' - ' + manifest.helpMarkDown;
-        
+        var version = manifest.version.Major + '.' + manifest.version.Minor + '.' + manifest.version.Patch;
+        manifest.helpMarkDown = 'v' + version + ' - ' + manifest.helpMarkDown;
+
+        var taskName = manifest.name;
         if (options.stage) {
-            manifest.friendlyName = manifest.friendlyName + ' (' + options.stage
+            manifest.friendlyName = manifest.friendlyName + ' (' + options.stage;
+            taskName += '-' + options.stage;
 
             if (options.version) {
-                manifest.friendlyName = manifest.friendlyName + ' ' + manifest.version.Major + '.' + manifest.version.Minor + '.' + manifest.version.Patch
+                manifest.friendlyName = manifest.friendlyName + ' ' + options.version;
             }
 
-            manifest.friendlyName = manifest.friendlyName + ')'
+            manifest.friendlyName = manifest.friendlyName + ')';
         }
-        
+    
         if (options.taskId) {
-            manifest.id = options.taskId
+            manifest.id = options.taskId;
         }
-        
+    
         fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 4));
+        
+        // telemetry
+        var indexPath = path.join(binariesPath, 'task', name, 'index.js');
+        var index = iconv.decode(fs.readFileSync(indexPath), 'utf-8');
+
+        if (options.instrumentationKey)
+            index = index.replace(/appInsights\.setup\('[^']*'\)/i, "appInsights.setup('" + options.instrumentationKey + "')");
+
+        index = index
+            .replace(/telemetry\.context\.tags\[telemetry.context.keys.operationName] = '[^']*'/i, "telemetry.context.tags[telemetry.context.keys.operationName] = '" + taskName + "'")
+            .replace(/telemetry\.context\.tags\[telemetry.context.keys.applicationVersion] = '[^']*'/i, "telemetry.context.tags[telemetry.context.keys.applicationVersion] = '" + version + "'")
+            .replace(/'taskId': '[^']*'/i, "'taskId': '" + manifest.id + "'");
+    
+        fs.writeFileSync(indexPath, iconv.encode(index, 'utf-8', { addBOM: false, stripBOM: null, defaultEncoding: null }));
     });
 }

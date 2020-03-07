@@ -32,6 +32,7 @@
     "typescript": "^2.9.2"
   },
   "dependencies": {
+    "applicationinsights": "^1.7.3",
     "azure-pipelines-task-lib": "^2.9.3",
     "iconv-lite": "^0.4.15",
     "jschardet": "^2.1.1"

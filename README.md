@@ -55,6 +55,7 @@ Parameters include (in parenthesis the yaml name):
 - **Empty value** (emptyValue): the variable value that will be replaced with an empty string.
 - **Variable files (JSON)** (variableFiles): the absolute or relative comma or newline-separated paths to the files containing additional variables. Wildcards can be used (eg: `vars\**\*.json` for all _.json_ files in all sub folders of _vars_). Variables declared in files overrides variables defined in the pipeline.
 - **Variable separator** (variableSeparator): the separtor to use in variable names for nested objects and arrays in variable files. Example: `{ 'My': { 'Value': ['Hello World!'] } }` will create a variable _My.Value.0_ with the value _Hello World!_.
+- **Send anonymous usage telemetry** (enableTelemetry): if checked anonymous usage data (hashed collection and pipeline id, none file parameter values) will be sent to the task author only to analyze task usage.
 
 ## Tips
 If you want to use tokens in XML based configuration files to be replaced during deployment and also have those files usable for local development you can combine the [Replace Tokens task](https://marketplace.visualstudio.com/items?itemName=qetza.replacetokens) with the [XDT tranform task](https://marketplace.visualstudio.com/items?itemName=qetza.xdttransform):
@@ -68,6 +69,9 @@ If you want to use tokens in XML based configuration files to be replaced during
 **New in 4.0.0**
 - **Breaking change**: If you were using custom _Token prefix_ and/or _Token suffix_ you need to select the appropriate pattern in _Token pattern_ or select `custom`.
 - Add _Token pattern_ parameter to more easily provide toekn prefix and suffix pattern ([#131](https://github.com/qetza/vsts-replacetokens-task/issues/131)).
+
+**New in 3.5.0**
+- Add anonymous usage telemetry.
 
 **New in 3.4.0**
 - Add summary in logs with number of tokens found and replaced ([#126](https://github.com/qetza/vsts-replacetokens-task/issues/126)).
